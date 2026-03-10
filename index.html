@@ -4,8 +4,14 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Pass-and-Play UNO (Fingerprint)</title>
+<<<<<<< HEAD
 <link rel="stylesheet" href="style.css">
 <link rel="icon" href="icon/favicon.png"
+=======
+  <link rel="icon" href="favicon.ico" type="image/x-icon" />
+  <link rel="stylesheet" href="style.css" />
+
+>>>>>>> b758a2f (Add UNO card assets and updates)
 </head>
 <body>
   <h1>Pass-and-Play UNO (Fingerprint)</h1>
@@ -100,6 +106,32 @@
       if (card.color === "Wild") return true;
       return card.color === currentColor || card.value === top.value;
     }
+    function normalizeColor(color) {
+      return color.toLowerCase();
+    }
+
+    function normalizeValue(value) {
+      const map = {
+        "Skip": "skip",
+        "Reverse": "reverse",
+        "+2": "two",
+        "Wild": "wild",
+        "Wild +4": "four",
+      };
+      return map[value] ?? value;
+    }
+
+    function cardImageName(card) {
+      if (card.color === "Wild") {
+        return `wild-${normalizeValue(card.value)}.png`;
+      }
+      return `${normalizeColor(card.color)}-${normalizeValue(card.value)}.png`;
+    }
+
+    function cardImagePath(card) {
+      return `assets/cards/${cardImageName(card)}`;
+    }
+
 
     function drawCards(game, playerIdx, n) {
       for (let i = 0; i < n; i++) {
@@ -189,12 +221,20 @@
       const p = g.players[g.currentPlayer];
       const top = g.discardPile.at(-1);
       byId("status").textContent = `Current: ${p.name} | Active color: ${g.currentColor} | Draw pile: ${g.drawPile.length}`;
-      byId("topCard").innerHTML = `<span class='card'>Top: ${cardToString(top)}</span>`;
+      byId("topCard").innerHTML = `
+        <div class='card top-card'>
+          <img class='card-img' src='${cardImagePath(top)}' alt='${cardToString(top)}' title='${cardToString(top)}' />
+          <span>Top: ${cardToString(top)}</span>
+        </div>`;
       const hand = byId("hand");
       hand.innerHTML = "";
       p.hand.forEach((card, i) => {
         const btn = document.createElement("button");
-        btn.textContent = `[${i}] ${cardToString(card)}`;
+        btn.classList.add("card-button");
+        btn.innerHTML = `
+          <img class='card-img' src='${cardImagePath(card)}' alt='${cardToString(card)}' title='${cardToString(card)}' />
+          <span>[${i}] ${cardToString(card)}</span>
+        `;
         if (isPlayable(card, top, g.currentColor)) btn.classList.add("playable");
         btn.onclick = () => {
           const chosen = card.color === "Wild" ? byId("wildColor").value : undefined;

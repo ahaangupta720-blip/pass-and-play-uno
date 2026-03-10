@@ -1,10 +1,13 @@
 :root { color-scheme: dark; }
 body { font-family: Arial, sans-serif; max-width: 900px; margin: 0 auto; padding: 1rem; background:#111; color:#eee; }
-.card { border: 1px solid #666; border-radius: 8px; padding: .5rem .75rem; margin: .25rem; display:inline-block; }
+.card { border: 1px solid #666; border-radius: 8px; padding: .5rem .75rem; margin: .25rem; display:inline-flex; align-items:center; gap:.6rem; }
 .playable { border-color:#4caf50; box-shadow: 0 0 0 1px #4caf50 inset; }
 .row { margin: .5rem 0; }
 input, button, select { padding: .5rem; margin: .25rem 0; }
 button { cursor: pointer; }
 .hidden { display:none; }
-#hand button { margin: .2rem; }
+#hand { display:flex; flex-wrap:wrap; gap:.5rem; }
+.card-button { display:flex; flex-direction:column; align-items:center; gap:.35rem; min-width:110px; background:#1d1d1d; border:1px solid #555; border-radius:10px; color:#eee; }
+.card-img { width:72px; height:108px; object-fit:cover; border-radius:8px; background:#222; border:1px solid #444; }
+.top-card .card-img { width:60px; height:90px; }
 .small { color:#bbb; font-size:.9rem; }

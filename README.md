@@ -34,6 +34,38 @@ Then visit `http://localhost:8080/index.html`.
 python uno.py
 ```
 
+
+## Card Image Assets (Browser)
+
+Place your card PNG files in:
+
+```
+assets/cards/
+```
+
+Naming convention used by the browser app:
+- Number cards: `red-4.png`, `blue-0.png`, etc.
+- Action cards: `red-skip.png`, `yellow-reverse.png`, `green-two.png` (`+2` maps to `two`)
+- Wild cards: `wild-wild.png`, `wild-four.png` (`Wild +4` maps to `four`)
+
+All color names are lowercase in filenames.
+
+
+### Auto-extract from a card sheet image
+
+If you have a full card-sheet image like the one in chat, you can auto-slice it into all required files:
+
+```bash
+python -m pip install pillow
+python scripts/extract_cards.py path/to/your-sheet.png
+```
+
+Then optionally zip for download/share:
+
+```bash
+python -m zipfile -c cards.zip assets/cards/*.png
+```
+
 ## Test
 
 ```bash
