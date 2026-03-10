@@ -4,25 +4,26 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Pass-and-Play UNO (Fingerprint)</title>
-<link rel="stylesheet" href="style.css">
-<link rel="icon" href="icon/favicon.png"
   <link rel="icon" href="favicon.ico" type="image/x-icon" />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <h1>Pass-and-Play UNO (Fingerprint)</h1>
-  <p class="small">Each player creates a secret phrase (hidden). Only matching phrase reveals that player's hand.</p>
+  <p class="small">Pass device, unlock with phrase, play UNO.</p>
 
   <section id="setup">
     <h2>Setup</h2>
     <div class="row">
-      <label>Players (2-8): <input id="playerCount" type="number" min="2" max="8" value="2"></label>
-      <button id="startSetup">Start Player Registration</button>
+      <label>Players (2-8):
+        <input id="playerCount" type="number" min="2" max="8" value="2" />
+      </label>
+      <button id="startSetup">Start Registration</button>
     </div>
+
     <div id="register" class="hidden">
       <h3 id="registerTitle"></h3>
-      <div><input id="playerName" placeholder="Player name"></div>
-      <div><input id="playerSecret" type="password" placeholder="Fingerprint phrase"></div>
+      <input id="playerName" placeholder="Player name" />
+      <input id="playerSecret" type="password" placeholder="Fingerprint phrase" />
       <button id="savePlayer">Save Player</button>
     </div>
   </section>
@@ -30,7 +31,7 @@
   <section id="gate" class="hidden">
     <h2>Pass Device</h2>
     <div id="turnPlayer"></div>
-    <div><input id="authSecret" type="password" placeholder="Enter fingerprint phrase"></div>
+    <input id="authSecret" type="password" placeholder="Enter fingerprint phrase" />
     <button id="unlock">Unlock Hand</button>
   </section>
 
@@ -41,9 +42,12 @@
     <div class="row">
       <button id="drawBtn">Draw</button>
       <select id="wildColor">
-        <option>Red</option><option>Yellow</option><option>Green</option><option>Blue</option>
+        <option>Red</option>
+        <option>Yellow</option>
+        <option>Green</option>
+        <option>Blue</option>
       </select>
-      <span class="small">(Wild color picker)</span>
+      <span class="small">Used when playing Wild cards.</span>
     </div>
     <h3>Your Hand</h3>
     <div id="hand"></div>
@@ -61,8 +65,15 @@
       registeringIndex: 0,
       players: [],
       game: null,
-      unlocked: false,
     };
+
+    function byId(id) {
+      return document.getElementById(id);
+    }
+
+    function show(el, visible = true) {
+      el.classList.toggle("hidden", !visible);
+    }
 
     function hash(secret) {
       let h = 2166136261;
@@ -73,35 +84,10 @@
       return (h >>> 0).toString(16).padStart(8, "0");
     }
 
-    function createDeck() {
-      const deck = [];
-      for (const color of COLORS) {
-        for (const value of NUMBER_VALUES) {
-          deck.push({ color, value });
-          if (value !== "0") deck.push({ color, value });
-        }
-        for (const value of ACTION_VALUES) deck.push({ color, value }, { color, value });
-      }
-      for (let i = 0; i < 4; i++) for (const value of WILD_VALUES) deck.push({ color:"Wild", value });
-      return deck;
+    function cardToString(card) {
+      return card.color === "Wild" ? card.value : `${card.color} ${card.value}`;
     }
 
-    function shuffle(cards) {
-      const deck = [...cards];
-      for (let i = deck.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [deck[i], deck[j]] = [deck[j], deck[i]];
-      }
-      return deck;
-    }
-
-    function cardToString(card) { return card.color === "Wild" ? card.value : `${card.color} ${card.value}`; }
-    function nextIdx(current, direction, count) { return (current + direction + count) % count; }
-
-    function isPlayable(card, top, currentColor) {
-      if (card.color === "Wild") return true;
-      return card.color === currentColor || card.value === top.value;
-    }
     function normalizeColor(color) {
       return color.toLowerCase();
     }
@@ -118,9 +104,7 @@
     }
 
     function cardImageName(card) {
-      if (card.color === "Wild") {
-        return `wild-${normalizeValue(card.value)}.png`;
-      }
+      if (card.color === "Wild") return `wild-${normalizeValue(card.value)}.png`;
       return `${normalizeColor(card.color)}-${normalizeValue(card.value)}.png`;
     }
 
@@ -128,21 +112,55 @@
       return `assets/cards/${cardImageName(card)}`;
     }
 
+    function createDeck() {
+      const deck = [];
+      for (const color of COLORS) {
+        for (const value of NUMBER_VALUES) {
+          deck.push({ color, value });
+          if (value !== "0") deck.push({ color, value });
+        }
+        for (const value of ACTION_VALUES) {
+          deck.push({ color, value }, { color, value });
+        }
+      }
+      for (let i = 0; i < 4; i++) {
+        for (const value of WILD_VALUES) deck.push({ color: "Wild", value });
+      }
+      return deck;
+    }
 
-    function drawCards(game, playerIdx, n) {
-      for (let i = 0; i < n; i++) {
+    function shuffle(cards) {
+      const deck = [...cards];
+      for (let i = deck.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [deck[i], deck[j]] = [deck[j], deck[i]];
+      }
+      return deck;
+    }
+
+    function nextIdx(current, direction, count) {
+      return (current + direction + count) % count;
+    }
+
+    function isPlayable(card, top, currentColor) {
+      if (card.color === "Wild") return true;
+      return card.color === currentColor || card.value === top.value;
+    }
+
+    function drawCards(game, playerIndex, count) {
+      for (let i = 0; i < count; i++) {
         if (game.drawPile.length === 0) {
           if (game.discardPile.length <= 1) break;
           const top = game.discardPile.pop();
           game.drawPile = shuffle(game.discardPile);
           game.discardPile = [top];
         }
-        const c = game.drawPile.pop();
-        if (c) game.players[playerIdx].hand.push(c);
+        const card = game.drawPile.pop();
+        if (card) game.players[playerIndex].hand.push(card);
       }
     }
 
-    function initGame(players) {
+    function initializeGame(players) {
       const game = {
         players: players.map((p) => ({ ...p, hand: [] })),
         drawPile: shuffle(createDeck()),
@@ -152,112 +170,128 @@
         currentColor: null,
         winner: null,
       };
-      for (let i = 0; i < 7; i++) for (let p = 0; p < game.players.length; p++) drawCards(game, p, 1);
+
+      for (let i = 0; i < 7; i++) {
+        for (let p = 0; p < game.players.length; p++) drawCards(game, p, 1);
+      }
+
       let first = game.drawPile.pop();
       while (first && first.color === "Wild") {
         game.drawPile.unshift(first);
         game.drawPile = shuffle(game.drawPile);
         first = game.drawPile.pop();
       }
+
       game.discardPile.push(first);
       game.currentColor = first.color;
       return game;
     }
 
     function applyAction(game, card) {
-      const n = game.players.length;
+      const count = game.players.length;
       if (card.value === "Reverse") {
         game.direction *= -1;
-        if (n === 2) game.currentPlayer = nextIdx(game.currentPlayer, game.direction, n);
+        if (count === 2) game.currentPlayer = nextIdx(game.currentPlayer, game.direction, count);
       } else if (card.value === "Skip") {
-        game.currentPlayer = nextIdx(game.currentPlayer, game.direction, n);
+        game.currentPlayer = nextIdx(game.currentPlayer, game.direction, count);
       } else if (card.value === "+2") {
-        const victim = nextIdx(game.currentPlayer, game.direction, n);
+        const victim = nextIdx(game.currentPlayer, game.direction, count);
         drawCards(game, victim, 2);
         game.currentPlayer = victim;
       } else if (card.value === "Wild +4") {
-        const victim = nextIdx(game.currentPlayer, game.direction, n);
+        const victim = nextIdx(game.currentPlayer, game.direction, count);
         drawCards(game, victim, 4);
         game.currentPlayer = victim;
       }
     }
 
     function playCard(game, handIndex, chosenColor) {
-      const p = game.players[game.currentPlayer];
-      const card = p.hand[handIndex];
+      const player = game.players[game.currentPlayer];
+      const card = player.hand[handIndex];
       if (!card) return alert("Invalid card.");
+
       const top = game.discardPile.at(-1);
       if (!isPlayable(card, top, game.currentColor)) return alert("Card not playable.");
-      p.hand.splice(handIndex, 1);
+
+      player.hand.splice(handIndex, 1);
       game.discardPile.push(card);
       game.currentColor = card.color === "Wild" ? chosenColor : card.color;
+
       applyAction(game, card);
-      if (p.hand.length === 0) {
-        game.winner = p.name;
+
+      if (player.hand.length === 0) {
+        game.winner = player.name;
         return;
       }
+
       game.currentPlayer = nextIdx(game.currentPlayer, game.direction, game.players.length);
     }
 
-    function byId(id){ return document.getElementById(id); }
-
-    function show(el, yes=true){ el.classList.toggle("hidden", !yes); }
-
     function renderGate() {
       const game = state.game;
-      const p = game.players[game.currentPlayer];
-      byId("turnPlayer").textContent = `Pass to ${p.name}, then enter phrase.`;
+      const player = game.players[game.currentPlayer];
+      byId("turnPlayer").textContent = `Pass to ${player.name}, then enter phrase.`;
       byId("authSecret").value = "";
       show(byId("gate"), true);
       show(byId("game"), false);
     }
 
     function renderGame() {
-      const g = state.game;
-      const p = g.players[g.currentPlayer];
-      const top = g.discardPile.at(-1);
-      byId("status").textContent = `Current: ${p.name} | Active color: ${g.currentColor} | Draw pile: ${g.drawPile.length}`;
+      const game = state.game;
+      const player = game.players[game.currentPlayer];
+      const top = game.discardPile.at(-1);
+
+      byId("status").textContent = `Current: ${player.name} | Active color: ${game.currentColor} | Draw pile: ${game.drawPile.length}`;
       byId("topCard").innerHTML = `
         <div class='card top-card'>
-          <img class='card-img' src='${cardImagePath(top)}' alt='${cardToString(top)}' title='${cardToString(top)}' />
+          <img class='card-img' src='${cardImagePath(top)}' alt='${cardToString(top)}' title='${cardToString(top)}'>
           <span>Top: ${cardToString(top)}</span>
-        </div>`;
+        </div>
+      `;
+
       const hand = byId("hand");
       hand.innerHTML = "";
-      p.hand.forEach((card, i) => {
+
+      player.hand.forEach((card, i) => {
         const btn = document.createElement("button");
         btn.classList.add("card-button");
         btn.innerHTML = `
-          <img class='card-img' src='${cardImagePath(card)}' alt='${cardToString(card)}' title='${cardToString(card)}' />
+          <img class='card-img' src='${cardImagePath(card)}' alt='${cardToString(card)}' title='${cardToString(card)}'>
           <span>[${i}] ${cardToString(card)}</span>
         `;
-        if (isPlayable(card, top, g.currentColor)) btn.classList.add("playable");
+
+        if (isPlayable(card, top, game.currentColor)) btn.classList.add("playable");
+
         btn.onclick = () => {
-          const chosen = card.color === "Wild" ? byId("wildColor").value : undefined;
-          playCard(g, i, chosen);
-          if (g.winner) {
-            alert(`${g.winner} wins!`);
+          const chosenColor = card.color === "Wild" ? byId("wildColor").value : undefined;
+          playCard(game, i, chosenColor);
+          if (game.winner) {
+            alert(`${game.winner} wins!`);
             location.reload();
             return;
           }
           renderGate();
         };
+
         hand.appendChild(btn);
       });
+
       show(byId("game"), true);
       show(byId("gate"), false);
     }
 
     byId("startSetup").onclick = () => {
-      const c = Number(byId("playerCount").value);
-      if (c < 2 || c > 8) return alert("Players must be 2-8.");
-      state.setupCount = c;
+      const count = Number(byId("playerCount").value);
+      if (count < 2 || count > 8) return alert("Players must be 2-8.");
+
+      state.setupCount = count;
       state.registeringIndex = 0;
       state.players = [];
-      show(byId("register"), true);
-      byId("registerTitle").textContent = `Register Player 1 of ${c}`;
+
+      byId("registerTitle").textContent = `Register Player 1 of ${count}`;
       byId("playerName").value = "";
       byId("playerSecret").value = "";
+      show(byId("register"), true);
     };
 
     byId("savePlayer").onclick = () => {
@@ -265,12 +299,15 @@
       const name = byId("playerName").value.trim() || `Player ${idx + 1}`;
       const secret = byId("playerSecret").value;
       if (!secret) return alert("Please enter a phrase.");
+
       state.players.push({ name, fingerprint: hash(secret) });
-      state.registeringIndex++;
+      state.registeringIndex += 1;
+
       byId("playerName").value = "";
       byId("playerSecret").value = "";
+
       if (state.registeringIndex >= state.setupCount) {
-        state.game = initGame(state.players);
+        state.game = initializeGame(state.players);
         show(byId("setup"), false);
         renderGate();
       } else {
@@ -279,22 +316,22 @@
     };
 
     byId("unlock").onclick = () => {
-      const g = state.game;
-      const p = g.players[g.currentPlayer];
+      const game = state.game;
+      const player = game.players[game.currentPlayer];
       const phrase = byId("authSecret").value;
-      if (hash(phrase) !== p.fingerprint) return alert("Fingerprint mismatch.");
+      if (hash(phrase) !== player.fingerprint) return alert("Fingerprint mismatch.");
       renderGame();
     };
 
     byId("drawBtn").onclick = () => {
-      const g = state.game;
-      drawCards(g, g.currentPlayer, 1);
+      const game = state.game;
+      drawCards(game, game.currentPlayer, 1);
       renderGame();
     };
 
     byId("endTurn").onclick = () => {
-      const g = state.game;
-      g.currentPlayer = nextIdx(g.currentPlayer, g.direction, g.players.length);
+      const game = state.game;
+      game.currentPlayer = nextIdx(game.currentPlayer, game.direction, game.players.length);
       renderGate();
     };
   </script>
