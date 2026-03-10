@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pass-and-Play UNO (Fingerprint)</title>
+  <style>
+    :root { color-scheme: dark; }
+    body { font-family: Arial, sans-serif; max-width: 900px; margin: 0 auto; padding: 1rem; background:#111; color:#eee; }
+    .card { border: 1px solid #666; border-radius: 8px; padding: .5rem .75rem; margin: .25rem; display:inline-block; }
+    .playable { border-color:#4caf50; box-shadow: 0 0 0 1px #4caf50 inset; }
+    .row { margin: .5rem 0; }
+    input, button, select { padding: .5rem; margin: .25rem 0; }
+    button { cursor: pointer; }
+    .hidden { display:none; }
+    #hand button { margin: .2rem; }
+    .small { color:#bbb; font-size:.9rem; }
+  </style>
+</head>
+<body>
+  <h1>Pass-and-Play UNO (Fingerprint)</h1>
+  <p class="small">Each player creates a secret phrase (hidden). Only matching phrase reveals that player's hand.</p>
+
+  <section id="setup">
+    <h2>Setup</h2>
+    <div class="row">
+      <label>Players (2-8): <input id="playerCount" type="number" min="2" max="8" value="2"></label>
+      <button id="startSetup">Start Player Registration</button>
+    </div>
+    <div id="register" class="hidden">
+      <h3 id="registerTitle"></h3>
+      <div><input id="playerName" placeholder="Player name"></div>
+      <div><input id="playerSecret" type="password" placeholder="Fingerprint phrase"></div>
+      <button id="savePlayer">Save Player</button>
+    </div>
+  </section>
+
+  <section id="gate" class="hidden">
+    <h2>Pass Device</h2>
+    <div id="turnPlayer"></div>
+    <div><input id="authSecret" type="password" placeholder="Enter fingerprint phrase"></div>
+    <button id="unlock">Unlock Hand</button>
+  </section>
+
+  <section id="game" class="hidden">
+    <h2>Game</h2>
+    <div id="status"></div>
+    <div id="topCard" class="row"></div>
+    <div class="row">
+      <button id="drawBtn">Draw</button>
+      <select id="wildColor">
+        <option>Red</option><option>Yellow</option><option>Green</option><option>Blue</option>
+      </select>
+      <span class="small">(Wild color picker)</span>
+    </div>
+    <h3>Your Hand</h3>
+    <div id="hand"></div>
+    <button id="endTurn">End Turn / Pass</button>
+  </section>
+
+  <script>
+    const COLORS = ["Red", "Yellow", "Green", "Blue"];
+    const NUMBER_VALUES = Array.from({ length: 10 }, (_, i) => String(i));
+    const ACTION_VALUES = ["Skip", "Reverse", "+2"];
+    const WILD_VALUES = ["Wild", "Wild +4"];
+
+    const state = {
+      setupCount: 0,
+      registeringIndex: 0,
+      players: [],
+      game: null,
+      unlocked: false,
+    };
+
+    function hash(secret) {
+      let h = 2166136261;
+      for (let i = 0; i < secret.length; i++) {
+        h ^= secret.charCodeAt(i);
+        h = Math.imul(h, 16777619);
+      }
+      return (h >>> 0).toString(16).padStart(8, "0");
+    }
+
+    function createDeck() {
+      const deck = [];
+      for (const color of COLORS) {
+        for (const value of NUMBER_VALUES) {
+          deck.push({ color, value });
+          if (value !== "0") deck.push({ color, value });
+        }
+        for (const value of ACTION_VALUES) deck.push({ color, value }, { color, value });
+      }
+      for (let i = 0; i < 4; i++) for (const value of WILD_VALUES) deck.push({ color:"Wild", value });
+      return deck;
+    }
+
+    function shuffle(cards) {
+      const deck = [...cards];
+      for (let i = deck.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [deck[i], deck[j]] = [deck[j], deck[i]];
+      }
+      return deck;
+    }
+
+    function cardToString(card) { return card.color === "Wild" ? card.value : `${card.color} ${card.value}`; }
+    function nextIdx(current, direction, count) { return (current + direction + count) % count; }
+
+    function isPlayable(card, top, currentColor) {
+      if (card.color === "Wild") return true;
+      return card.color === currentColor || card.value === top.value;
+    }
+
+    function drawCards(game, playerIdx, n) {
+      for (let i = 0; i < n; i++) {
+        if (game.drawPile.length === 0) {
+          if (game.discardPile.length <= 1) break;
+          const top = game.discardPile.pop();
+          game.drawPile = shuffle(game.discardPile);
+          game.discardPile = [top];
+        }
+        const c = game.drawPile.pop();
+        if (c) game.players[playerIdx].hand.push(c);
+      }
+    }
+
+    function initGame(players) {
+      const game = {
+        players: players.map((p) => ({ ...p, hand: [] })),
+        drawPile: shuffle(createDeck()),
+        discardPile: [],
+        currentPlayer: 0,
+        direction: 1,
+        currentColor: null,
+        winner: null,
+      };
+      for (let i = 0; i < 7; i++) for (let p = 0; p < game.players.length; p++) drawCards(game, p, 1);
+      let first = game.drawPile.pop();
+      while (first && first.color === "Wild") {
+        game.drawPile.unshift(first);
+        game.drawPile = shuffle(game.drawPile);
+        first = game.drawPile.pop();
+      }
+      game.discardPile.push(first);
+      game.currentColor = first.color;
+      return game;
+    }
+
+    function applyAction(game, card) {
+      const n = game.players.length;
+      if (card.value === "Reverse") {
+        game.direction *= -1;
+        if (n === 2) game.currentPlayer = nextIdx(game.currentPlayer, game.direction, n);
+      } else if (card.value === "Skip") {
+        game.currentPlayer = nextIdx(game.currentPlayer, game.direction, n);
+      } else if (card.value === "+2") {
+        const victim = nextIdx(game.currentPlayer, game.direction, n);
+        drawCards(game, victim, 2);
+        game.currentPlayer = victim;
+      } else if (card.value === "Wild +4") {
+        const victim = nextIdx(game.currentPlayer, game.direction, n);
+        drawCards(game, victim, 4);
+        game.currentPlayer = victim;
+      }
+    }
+
+    function playCard(game, handIndex, chosenColor) {
+      const p = game.players[game.currentPlayer];
+      const card = p.hand[handIndex];
+      if (!card) return alert("Invalid card.");
+      const top = game.discardPile.at(-1);
+      if (!isPlayable(card, top, game.currentColor)) return alert("Card not playable.");
+      p.hand.splice(handIndex, 1);
+      game.discardPile.push(card);
+      game.currentColor = card.color === "Wild" ? chosenColor : card.color;
+      applyAction(game, card);
+      if (p.hand.length === 0) {
+        game.winner = p.name;
+        return;
+      }
+      game.currentPlayer = nextIdx(game.currentPlayer, game.direction, game.players.length);
+    }
+
+    function byId(id){ return document.getElementById(id); }
+
+    function show(el, yes=true){ el.classList.toggle("hidden", !yes); }
+
+    function renderGate() {
+      const game = state.game;
+      const p = game.players[game.currentPlayer];
+      byId("turnPlayer").textContent = `Pass to ${p.name}, then enter phrase.`;
+      byId("authSecret").value = "";
+      show(byId("gate"), true);
+      show(byId("game"), false);
+    }
+
+    function renderGame() {
+      const g = state.game;
+      const p = g.players[g.currentPlayer];
+      const top = g.discardPile.at(-1);
+      byId("status").textContent = `Current: ${p.name} | Active color: ${g.currentColor} | Draw pile: ${g.drawPile.length}`;
+      byId("topCard").innerHTML = `<span class='card'>Top: ${cardToString(top)}</span>`;
+      const hand = byId("hand");
+      hand.innerHTML = "";
+      p.hand.forEach((card, i) => {
+        const btn = document.createElement("button");
+        btn.textContent = `[${i}] ${cardToString(card)}`;
+        if (isPlayable(card, top, g.currentColor)) btn.classList.add("playable");
+        btn.onclick = () => {
+          const chosen = card.color === "Wild" ? byId("wildColor").value : undefined;
+          playCard(g, i, chosen);
+          if (g.winner) {
+            alert(`${g.winner} wins!`);
+            location.reload();
+            return;
+          }
+          renderGate();
+        };
+        hand.appendChild(btn);
+      });
+      show(byId("game"), true);
+      show(byId("gate"), false);
+    }
+
+    byId("startSetup").onclick = () => {
+      const c = Number(byId("playerCount").value);
+      if (c < 2 || c > 8) return alert("Players must be 2-8.");
+      state.setupCount = c;
+      state.registeringIndex = 0;
+      state.players = [];
+      show(byId("register"), true);
+      byId("registerTitle").textContent = `Register Player 1 of ${c}`;
+      byId("playerName").value = "";
+      byId("playerSecret").value = "";
+    };
+
+    byId("savePlayer").onclick = () => {
+      const idx = state.registeringIndex;
+      const name = byId("playerName").value.trim() || `Player ${idx + 1}`;
+      const secret = byId("playerSecret").value;
+      if (!secret) return alert("Please enter a phrase.");
+      state.players.push({ name, fingerprint: hash(secret) });
+      state.registeringIndex++;
+      byId("playerName").value = "";
+      byId("playerSecret").value = "";
+      if (state.registeringIndex >= state.setupCount) {
+        state.game = initGame(state.players);
+        show(byId("setup"), false);
+        renderGate();
+      } else {
+        byId("registerTitle").textContent = `Register Player ${state.registeringIndex + 1} of ${state.setupCount}`;
+      }
+    };
+
+    byId("unlock").onclick = () => {
+      const g = state.game;
+      const p = g.players[g.currentPlayer];
+      const phrase = byId("authSecret").value;
+      if (hash(phrase) !== p.fingerprint) return alert("Fingerprint mismatch.");
+      renderGame();
+    };
+
+    byId("drawBtn").onclick = () => {
+      const g = state.game;
+      drawCards(g, g.currentPlayer, 1);
+      renderGame();
+    };
+
+    byId("endTurn").onclick = () => {
+      const g = state.game;
+      g.currentPlayer = nextIdx(g.currentPlayer, g.direction, g.players.length);
+      renderGate();
+    };
+  </script>
+</body>
+</html>
