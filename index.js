@@ -18,16 +18,65 @@ function clearScreen() {
   output.write("\x1Bc");
 }
 
+async function promptHidden(promptText) {
+  if (!input.isTTY || !output.isTTY) {
+    throw new Error("Hidden input requires a TTY terminal.");
+  }
+
+  return new Promise((resolve) => {
+    readline.emitKeypressEvents(input);
+    input.setRawMode(true);
+
+    let value = "";
+    output.write(promptText);
+
+    const onKeypress = (char, key) => {
+      if (key && (key.name === "return" || key.name === "enter")) {
+        input.setRawMode(false);
+        input.removeListener("keypress", onKeypress);
+        output.write("\n");
+        resolve(value);
+        return;
+      }
+
+      if (key && key.ctrl && key.name === "c") {
+        input.setRawMode(false);
+        input.removeListener("keypress", onKeypress);
+        output.write("\n");
+        process.exit(1);
+      }
+
+      if (key && key.name === "backspace") {
+        if (value.length > 0) {
+          value = value.slice(0, -1);
+        }
+        return;
+      }
+
+      if (char) {
+        value += char;
+      }
+    };
+
+    input.on("keypress", onKeypress);
+  });
+}
+
 async function askForPlayerSetup(rl, number) {
+  clearScreen();
   const name = (await rl.question(`Player ${number} name: `)).trim() || `Player ${number}`;
-  const secret = await rl.question(`Create fingerprint phrase for ${name}: `);
+  const secret = await promptHidden(`Create fingerprint phrase for ${name}: `);
   const fp = fingerprint(secret);
+  clearScreen();
   console.log(`Registered ${name} with fingerprint: ${fp}`);
+  console.log("Pass the device to the next player.");
+  await rl.question("Press Enter to continue...");
   return { name, fingerprint: fp };
 }
 
-async function authenticateCurrentPlayer(rl, player) {
-  const phrase = await rl.question(`${player.name}, enter your fingerprint phrase: `);
+async function authenticateCurrentPlayer(player) {
+  clearScreen();
+  const phrase = await promptHidden(`${player.name}, enter your fingerprint phrase: `);
   const attempted = fingerprint(phrase);
   if (attempted !== player.fingerprint) {
     console.log("Fingerprint mismatch. Hand stays hidden.");
@@ -62,9 +111,8 @@ async function gameLoop(rl, game) {
     const player = game.players[game.currentPlayer];
     console.log(`Pass device to ${player.name}. Press Enter when ready.`);
     await rl.question("");
-    clearScreen();
 
-    const isAuthed = await authenticateCurrentPlayer(rl, player);
+    const isAuthed = await authenticateCurrentPlayer(player);
     if (!isAuthed) {
       await rl.question("Press Enter to continue to next prompt...");
       continue;
@@ -123,6 +171,7 @@ async function gameLoop(rl, game) {
 async function main() {
   const rl = readline.createInterface({ input, output });
   try {
+    clearScreen();
     console.log("=== Fingerprint Pass-and-Play UNO (Node.js) ===");
     let count;
     while (true) {
